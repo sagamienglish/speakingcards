@@ -1,513 +1,702 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, RefreshCw, Trophy, Clock, Music, Volume2, VolumeX, Crown, Star } from 'lucide-react';
-
-// --- データ定義 ---
-
-// 英検レベルの定義
-type WordLevel = 1 | 2 | 3; // 1: Bronze(10), 2: Silver(20), 3: Gold(30)
-
-interface WordCard {
-  en: string;
-  ja: string;
-  level: WordLevel;
-}
-
-interface TopicData {
-  emoji: string;
-  title: string;
-  hint: string;
-  words: WordCard[];
-}
-
-// 日常的なトピックとレベル別単語リスト
-// 英検4級以下(L1), 3級(L2), 準2級(L3)を目安に分類
-const TOPICS_DATA: TopicData[] = [
-  { 
-    emoji: "🏫",
-    title: "School Life", 
-    hint: "What do you like about school?",
-    words: [
-      // Level 1 (+10)
-      { en: "teacher", ja: "先生", level: 1 },
-      { en: "class", ja: "授業", level: 1 },
-      { en: "friend", ja: "友達", level: 1 },
-      { en: "lunch", ja: "昼食", level: 1 },
-      // Level 2 (+20)
-      { en: "subject", ja: "科目", level: 2 },
-      { en: "uniform", ja: "制服", level: 2 },
-      { en: "graduate", ja: "卒業する", level: 2 },
-      { en: "event", ja: "行事", level: 2 },
-      // Level 3 (+30)
-      { en: "atmosphere", ja: "雰囲気", level: 3 },
-      { en: "concentrate", ja: "集中する", level: 3 },
-      { en: "encourage", ja: "励ます", level: 3 },
-      { en: "opportunity", ja: "機会", level: 3 },
-    ]
-  },
-  { 
-    emoji: "🍔",
-    title: "Food", 
-    hint: "What is your favorite food?",
-    words: [
-      { en: "delicious", ja: "おいしい", level: 1 },
-      { en: "cook", ja: "料理する", level: 1 },
-      { en: "sweet", ja: "甘い", level: 1 },
-      { en: "eat", ja: "食べる", level: 1 },
-      { en: "healthy", ja: "健康的な", level: 2 },
-      { en: "recipe", ja: "レシピ", level: 2 },
-      { en: "traditional", ja: "伝統的な", level: 2 },
-      { en: "taste", ja: "味", level: 2 },
-      { en: "ingredient", ja: "材料", level: 3 },
-      { en: "nutrition", ja: "栄養", level: 3 },
-      { en: "recommend", ja: "勧める", level: 3 },
-      { en: "contain", ja: "含む", level: 3 },
-    ]
-  },
-  { 
-    emoji: "✈️",
-    title: "Travel", 
-    hint: "Where do you want to go?",
-    words: [
-      { en: "trip", ja: "旅行", level: 1 },
-      { en: "country", ja: "国", level: 1 },
-      { en: "sea", ja: "海", level: 1 },
-      { en: "hotel", ja: "ホテル", level: 1 },
-      { en: "foreign", ja: "外国の", level: 2 },
-      { en: "experience", ja: "経験", level: 2 },
-      { en: "culture", ja: "文化", level: 2 },
-      { en: "tourist", ja: "観光客", level: 2 },
-      { en: "environment", ja: "環境", level: 3 },
-      { en: "scenery", ja: "風景", level: 3 },
-      { en: "communicate", ja: "意思疎通する", level: 3 },
-      { en: "destination", ja: "目的地", level: 3 },
-    ]
-  },
-  { 
-    emoji: "🎮",
-    title: "Hobbies", 
-    hint: "What do you do in your free time?",
-    words: [
-      { en: "like", ja: "好き", level: 1 },
-      { en: "play", ja: "遊ぶ", level: 1 },
-      { en: "watch", ja: "見る", level: 1 },
-      { en: "game", ja: "ゲーム", level: 1 },
-      { en: "exciting", ja: "わくわくする", level: 2 },
-      { en: "movie", ja: "映画", level: 2 },
-      { en: "relax", ja: "リラックスする", level: 2 },
-      { en: "practice", ja: "練習する", level: 2 },
-      { en: "instrument", ja: "楽器", level: 3 },
-      { en: "creative", ja: "創造的な", level: 3 },
-      { en: "satisfied", ja: "満足した", level: 3 },
-      { en: "improve", ja: "向上させる", level: 3 },
-    ]
-  },
-  { 
-    emoji: "🔮",
-    title: "Future", 
-    hint: "What do you want to be?",
-    words: [
-      { en: "job", ja: "仕事", level: 1 },
-      { en: "money", ja: "お金", level: 1 },
-      { en: "dream", ja: "夢", level: 1 },
-      { en: "big", ja: "大きい", level: 1 },
-      { en: "decide", ja: "決める", level: 2 },
-      { en: "abroad", ja: "海外で", level: 2 },
-      { en: "company", ja: "会社", level: 2 },
-      { en: "useful", ja: "役に立つ", level: 2 },
-      { en: "society", ja: "社会", level: 3 },
-      { en: "contribute", ja: "貢献する", level: 3 },
-      { en: "specialist", ja: "専門家", level: 3 },
-      { en: "realize", ja: "実現する", level: 3 },
-    ]
-  }
-];
-
-// 信頼性の高いBGM URL
-const BGM_SOURCES = [
-  "https://cdn.pixabay.com/download/audio/2022/11/22/audio_febc508520.mp3", // Happy Upbeat
-  "https://cdn.pixabay.com/download/audio/2022/10/25/audio_5103407886.mp3", // Fun Comedy
-];
-
-// ポイント定義
-const POINTS = {
-  1: 10,
-  2: 20,
-  3: 30
-};
-
-export default function App() {
-  // --- State Management ---
-  const [mode, setMode] = useState<'menu' | 'game'>('menu');
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pair Speaking Challenge</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel (JSX変換用) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
-  // Game Data
-  const [currentTopic, setCurrentTopic] = useState(TOPICS_DATA[0]);
-  const [activeCards, setActiveCards] = useState<WordCard[]>([]);
-  
-  // Game Status
-  const [timeLeft, setTimeLeft] = useState(60);
-  const [gameTime, setGameTime] = useState(60);
-  const [isActive, setIsActive] = useState(false);
-  
-  // Scoring: Player A vs Player B
-  const [scoreA, setScoreA] = useState(0);
-  const [scoreB, setScoreB] = useState(0);
-  
-  // Card Ownership: { index: 'A' | 'B' | null }
-  const [cardStatus, setCardStatus] = useState<Record<number, 'A' | 'B' | null>>({});
-
-  // Audio
-  const [isMuted, setIsMuted] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // --- Logic ---
-
-  // ゲーム初期化（トピック変更時も呼ぶ）
-  const initRound = () => {
-    // ランダムトピック
-    const randomTopic = TOPICS_DATA[Math.floor(Math.random() * TOPICS_DATA.length)];
-    setCurrentTopic(randomTopic);
-
-    // カード選出ロジック: 各レベルからバランスよく選出
-    // Level 1: 2枚, Level 2: 2枚, Level 3: 2枚 -> 計6枚
-    const l1 = (randomTopic.words || []).filter(w => w.level === 1).sort(() => 0.5 - Math.random()).slice(0, 2);
-    const l2 = (randomTopic.words || []).filter(w => w.level === 2).sort(() => 0.5 - Math.random()).slice(0, 2);
-    const l3 = (randomTopic.words || []).filter(w => w.level === 3).sort(() => 0.5 - Math.random()).slice(0, 2);
-    
-    // 混ぜる
-    const mixed = [...l1, ...l2, ...l3].sort(() => 0.5 - Math.random());
-    setActiveCards(mixed);
-
-    // 状態リセット
-    setCardStatus({});
-    setScoreA(0);
-    setScoreB(0);
-    setTimeLeft(gameTime);
-    setIsActive(false);
-    
-    // 音楽停止
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      touch-action: manipulation; /* ダブルタップズーム防止 */
     }
-  };
+  </style>
+</head>
+<body>
+  <div id="root"></div>
 
-  const startGame = () => {
-    setIsActive(true);
-    
-    // BGM再生ロジック修正
-    if (!isMuted && audioRef.current) {
-      const randomSrc = BGM_SOURCES[Math.floor(Math.random() * BGM_SOURCES.length)];
-      audioRef.current.src = randomSrc;
-      audioRef.current.volume = 0.3; // 音量を少し下げる
-      
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.log("Audio playback was prevented or interrupted:", error);
-        });
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- アイコンコンポーネント ---
+    const IconWrapper = ({ children, size = 24, className = "" }) => (
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width={size} 
+        height={size} 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+      >
+        {children}
+      </svg>
+    );
+
+    const Play = (props) => (
+      <IconWrapper {...props}>
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </IconWrapper>
+    );
+
+    const RefreshCw = (props) => (
+      <IconWrapper {...props}>
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+        <path d="M21 3v5h-5"></path>
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+        <path d="M8 16H3v5"></path>
+      </IconWrapper>
+    );
+
+    const Trophy = (props) => (
+      <IconWrapper {...props}>
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+        <path d="M4 22h16"></path>
+        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+      </IconWrapper>
+    );
+
+    const Clock = (props) => (
+      <IconWrapper {...props}>
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </IconWrapper>
+    );
+
+    const Volume2 = (props) => (
+      <IconWrapper {...props}>
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+      </IconWrapper>
+    );
+
+    const VolumeX = (props) => (
+      <IconWrapper {...props}>
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <line x1="23" y1="9" x2="17" y2="15"></line>
+        <line x1="17" y1="9" x2="23" y2="15"></line>
+      </IconWrapper>
+    );
+
+    const Crown = (props) => (
+      <IconWrapper {...props}>
+        <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"></path>
+      </IconWrapper>
+    );
+
+    const Star = (props) => (
+      <IconWrapper {...props}>
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+      </IconWrapper>
+    );
+
+    // --- データ定義 ---
+
+    // 日常的なトピック10個と各20単語
+    const TOPICS_DATA = [
+      { 
+        emoji: "🏫",
+        title: "School Life", 
+        hint: "What do you like about school?",
+        words: [
+          { en: "teacher", ja: "先生", level: 1 }, { en: "class", ja: "授業", level: 1 },
+          { en: "friend", ja: "友達", level: 1 }, { en: "lunch", ja: "昼食", level: 1 },
+          { en: "test", ja: "試験", level: 1 }, { en: "club", ja: "部活", level: 1 },
+          { en: "subject", ja: "科目", level: 2 }, { en: "uniform", ja: "制服", level: 2 },
+          { en: "graduate", ja: "卒業する", level: 2 }, { en: "event", ja: "行事", level: 2 },
+          { en: "strict", ja: "厳しい", level: 2 }, { en: "popular", ja: "人気のある", level: 2 },
+          { en: "atmosphere", ja: "雰囲気", level: 3 }, { en: "concentrate", ja: "集中する", level: 3 },
+          { en: "encourage", ja: "励ます", level: 3 }, { en: "opportunity", ja: "機会", level: 3 },
+          { en: "achievement", ja: "達成", level: 3 }, { en: "cooperate", ja: "協力する", level: 3 },
+          { en: "organize", ja: "組織する", level: 3 }, { en: "presentation", ja: "発表", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🍔",
+        title: "Food", 
+        hint: "What is your favorite food?",
+        words: [
+          { en: "delicious", ja: "おいしい", level: 1 }, { en: "cook", ja: "料理する", level: 1 },
+          { en: "sweet", ja: "甘い", level: 1 }, { en: "eat", ja: "食べる", level: 1 },
+          { en: "fruit", ja: "果物", level: 1 }, { en: "restaurant", ja: "レストラン", level: 1 },
+          { en: "healthy", ja: "健康的な", level: 2 }, { en: "recipe", ja: "レシピ", level: 2 },
+          { en: "traditional", ja: "伝統的な", level: 2 }, { en: "taste", ja: "味", level: 2 },
+          { en: "convenience", ja: "便利さ", level: 2 }, { en: "vegetable", ja: "野菜", level: 2 },
+          { en: "ingredient", ja: "材料", level: 3 }, { en: "nutrition", ja: "栄養", level: 3 },
+          { en: "recommend", ja: "勧める", level: 3 }, { en: "contain", ja: "含む", level: 3 },
+          { en: "flavor", ja: "風味", level: 3 }, { en: "appetite", ja: "食欲", level: 3 },
+          { en: "diet", ja: "食事療法", level: 3 }, { en: "prepare", ja: "準備する", level: 3 }
+        ]
+      },
+      { 
+        emoji: "✈️",
+        title: "Travel", 
+        hint: "Where do you want to go?",
+        words: [
+          { en: "trip", ja: "旅行", level: 1 }, { en: "country", ja: "国", level: 1 },
+          { en: "sea", ja: "海", level: 1 }, { en: "hotel", ja: "ホテル", level: 1 },
+          { en: "bus", ja: "バス", level: 1 }, { en: "map", ja: "地図", level: 1 },
+          { en: "foreign", ja: "外国の", level: 2 }, { en: "experience", ja: "経験", level: 2 },
+          { en: "culture", ja: "文化", level: 2 }, { en: "tourist", ja: "観光客", level: 2 },
+          { en: "museum", ja: "博物館", level: 2 }, { en: "airport", ja: "空港", level: 2 },
+          { en: "environment", ja: "環境", level: 3 }, { en: "scenery", ja: "風景", level: 3 },
+          { en: "communicate", ja: "意思疎通する", level: 3 }, { en: "destination", ja: "目的地", level: 3 },
+          { en: "transportation", ja: "交通機関", level: 3 }, { en: "sightseeing", ja: "観光", level: 3 },
+          { en: "reservation", ja: "予約", level: 3 }, { en: "explore", ja: "探検する", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🎮",
+        title: "Hobbies", 
+        hint: "What do you do in your free time?",
+        words: [
+          { en: "like", ja: "好き", level: 1 }, { en: "play", ja: "遊ぶ", level: 1 },
+          { en: "watch", ja: "見る", level: 1 }, { en: "game", ja: "ゲーム", level: 1 },
+          { en: "read", ja: "読む", level: 1 }, { en: "song", ja: "歌", level: 1 },
+          { en: "exciting", ja: "わくわくする", level: 2 }, { en: "movie", ja: "映画", level: 2 },
+          { en: "relax", ja: "リラックスする", level: 2 }, { en: "practice", ja: "練習する", level: 2 },
+          { en: "collect", ja: "集める", level: 2 }, { en: "hobby", ja: "趣味", level: 2 },
+          { en: "instrument", ja: "楽器", level: 3 }, { en: "creative", ja: "創造的な", level: 3 },
+          { en: "satisfied", ja: "満足した", level: 3 }, { en: "improve", ja: "向上させる", level: 3 },
+          { en: "performance", ja: "演奏", level: 3 }, { en: "audience", ja: "観客", level: 3 },
+          { en: "skill", ja: "技術", level: 3 }, { en: "participate", ja: "参加する", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🔮",
+        title: "Future", 
+        hint: "What do you want to be?",
+        words: [
+          { en: "job", ja: "仕事", level: 1 }, { en: "money", ja: "お金", level: 1 },
+          { en: "dream", ja: "夢", level: 1 }, { en: "big", ja: "大きい", level: 1 },
+          { en: "work", ja: "働く", level: 1 }, { en: "rich", ja: "金持ちの", level: 1 },
+          { en: "decide", ja: "決める", level: 2 }, { en: "abroad", ja: "海外で", level: 2 },
+          { en: "company", ja: "会社", level: 2 }, { en: "useful", ja: "役に立つ", level: 2 },
+          { en: "nurse", ja: "看護師", level: 2 }, { en: "earn", ja: "稼ぐ", level: 2 },
+          { en: "society", ja: "社会", level: 3 }, { en: "contribute", ja: "貢献する", level: 3 },
+          { en: "specialist", ja: "専門家", level: 3 }, { en: "realize", ja: "実現する", level: 3 },
+          { en: "university", ja: "大学", level: 3 }, { en: "career", ja: "経歴", level: 3 },
+          { en: "independent", ja: "独立した", level: 3 }, { en: "success", ja: "成功", level: 3 }
+        ]
+      },
+      { 
+        emoji: "⚽",
+        title: "Sports", 
+        hint: "What sports do you like?",
+        words: [
+          { en: "run", ja: "走る", level: 1 }, { en: "team", ja: "チーム", level: 1 },
+          { en: "ball", ja: "ボール", level: 1 }, { en: "win", ja: "勝つ", level: 1 },
+          { en: "pool", ja: "プール", level: 1 }, { en: "fan", ja: "ファン", level: 1 },
+          { en: "player", ja: "選手", level: 2 }, { en: "strong", ja: "強い", level: 2 },
+          { en: "match", ja: "試合", level: 2 }, { en: "exercise", ja: "運動", level: 2 },
+          { en: "lose", ja: "負ける", level: 2 }, { en: "rule", ja: "ルール", level: 2 },
+          { en: "opponent", ja: "相手", level: 3 }, { en: "compete", ja: "競争する", level: 3 },
+          { en: "effort", ja: "努力", level: 3 }, { en: "professional", ja: "プロの", level: 3 },
+          { en: "victory", ja: "勝利", level: 3 }, { en: "stadium", ja: "競技場", level: 3 },
+          { en: "athlete", ja: "運動選手", level: 3 }, { en: "tournament", ja: "トーナメント", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🎵",
+        title: "Music", 
+        hint: "What kind of music do you listen to?",
+        words: [
+          { en: "sing", ja: "歌う", level: 1 }, { en: "listen", ja: "聞く", level: 1 },
+          { en: "band", ja: "バンド", level: 1 }, { en: "cool", ja: "かっこいい", level: 1 },
+          { en: "dance", ja: "踊る", level: 1 }, { en: "loud", ja: "うるさい", level: 1 },
+          { en: "concert", ja: "コンサート", level: 2 }, { en: "voice", ja: "声", level: 2 },
+          { en: "popular", ja: "人気のある", level: 2 }, { en: "message", ja: "メッセージ", level: 2 },
+          { en: "artist", ja: "芸術家", level: 2 }, { en: "piano", ja: "ピアノ", level: 2 },
+          { en: "lyrics", ja: "歌詞", level: 3 }, { en: "rhythm", ja: "リズム", level: 3 },
+          { en: "influence", ja: "影響", level: 3 }, { en: "perform", ja: "演じる", level: 3 },
+          { en: "musician", ja: "音楽家", level: 3 }, { en: "emotional", ja: "感情的な", level: 3 },
+          { en: "classic", ja: "典型的な", level: 3 }, { en: "melody", ja: "旋律", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🏠",
+        title: "Daily Life", 
+        hint: "Tell me about your daily routine.",
+        words: [
+          { en: "get up", ja: "起きる", level: 1 }, { en: "sleep", ja: "寝る", level: 1 },
+          { en: "home", ja: "家", level: 1 }, { en: "breakfast", ja: "朝食", level: 1 },
+          { en: "study", ja: "勉強する", level: 1 }, { en: "watch TV", ja: "テレビを見る", level: 1 },
+          { en: "busy", ja: "忙しい", level: 2 }, { en: "tired", ja: "疲れた", level: 2 },
+          { en: "weekend", ja: "週末", level: 2 }, { en: "clean", ja: "掃除する", level: 2 },
+          { en: "early", ja: "早い", level: 2 }, { en: "habit", ja: "習慣", level: 2 },
+          { en: "regular", ja: "規則的な", level: 3 }, { en: "schedule", ja: "予定", level: 3 },
+          { en: "lazy", ja: "怠惰な", level: 3 }, { en: "efficient", ja: "効率的な", level: 3 },
+          { en: "chore", ja: "雑用", level: 3 }, { en: "commute", ja: "通学する", level: 3 },
+          { en: "lifestyle", ja: "生活様式", level: 3 }, { en: "balance", ja: "バランス", level: 3 }
+        ]
+      },
+      { 
+        emoji: "👪",
+        title: "Family", 
+        hint: "Talk about your family or friends.",
+        words: [
+          { en: "father", ja: "父", level: 1 }, { en: "mother", ja: "母", level: 1 },
+          { en: "kind", ja: "親切な", level: 1 }, { en: "help", ja: "手伝う", level: 1 },
+          { en: "live", ja: "住む", level: 1 }, { en: "talk", ja: "話す", level: 1 },
+          { en: "brother", ja: "兄弟", level: 2 }, { en: "sister", ja: "姉妹", level: 2 },
+          { en: "pet", ja: "ペット", level: 2 }, { en: "together", ja: "一緒に", level: 2 },
+          { en: "parent", ja: "親", level: 2 }, { en: "birthday", ja: "誕生日", level: 2 },
+          { en: "relation", ja: "関係", level: 3 }, { en: "support", ja: "支える", level: 3 },
+          { en: "advice", ja: "助言", level: 3 }, { en: "memory", ja: "思い出", level: 3 },
+          { en: "argue", ja: "口論する", level: 3 }, { en: "respect", ja: "尊敬する", level: 3 },
+          { en: "generation", ja: "世代", level: 3 }, { en: "resemble", ja: "似ている", level: 3 }
+        ]
+      },
+      { 
+        emoji: "🌦️",
+        title: "Season", 
+        hint: "Which season do you like the best?",
+        words: [
+          { en: "hot", ja: "暑い", level: 1 }, { en: "cold", ja: "寒い", level: 1 },
+          { en: "rain", ja: "雨", level: 1 }, { en: "snow", ja: "雪", level: 1 },
+          { en: "summer", ja: "夏", level: 1 }, { en: "winter", ja: "冬", level: 1 },
+          { en: "spring", ja: "春", level: 2 }, { en: "fall", ja: "秋", level: 2 },
+          { en: "wear", ja: "着る", level: 2 }, { en: "weather", ja: "天気", level: 2 },
+          { en: "beautiful", ja: "美しい", level: 2 }, { en: "warm", ja: "暖かい", level: 2 },
+          { en: "climate", ja: "気候", level: 3 }, { en: "temperature", ja: "気温", level: 3 },
+          { en: "humid", ja: "湿気の多い", level: 3 }, { en: "activity", ja: "活動", level: 3 },
+          { en: "festival", ja: "祭り", level: 3 }, { en: "comfortable", ja: "快適な", level: 3 },
+          { en: "seasonal", ja: "季節の", level: 3 }, { en: "forecast", ja: "予報", level: 3 }
+        ]
       }
-    }
-  };
+    ];
 
-  // タイマー
-  useEffect(() => {
-    if (isActive && timeLeft > 0) {
-      timerRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-    } else if (timeLeft === 0) {
-      setIsActive(false);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-    }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    // 信頼性の高いBGM URL
+    const BGM_SOURCES = [
+      "https://cdn.pixabay.com/download/audio/2022/11/22/audio_febc508520.mp3", // Happy Upbeat
+      "https://cdn.pixabay.com/download/audio/2022/10/25/audio_5103407886.mp3", // Fun Comedy
+    ];
+
+    // ポイント定義
+    const POINTS = {
+      1: 10,
+      2: 20,
+      3: 30
     };
-  }, [isActive, timeLeft]);
 
-  // カードクリック処理
-  const handleCardClick = (index: number, player: 'A' | 'B') => {
-    if (!isActive && timeLeft > 0) return; // ゲーム中のみ
-    if (cardStatus[index]) return; // 取得済みなら何もしない
+    function App() {
+      // --- State Management ---
+      const [mode, setMode] = useState('menu'); // 'menu' | 'game'
+      
+      // Game Data
+      const [currentTopic, setCurrentTopic] = useState(TOPICS_DATA[0]);
+      const [activeCards, setActiveCards] = useState([]);
+      
+      // Game Status
+      const [timeLeft, setTimeLeft] = useState(60);
+      const [gameTime, setGameTime] = useState(60);
+      const [isActive, setIsActive] = useState(false);
+      
+      // Scoring: Player A vs Player B
+      const [scoreA, setScoreA] = useState(0);
+      const [scoreB, setScoreB] = useState(0);
+      
+      // Card Ownership: { index: 'A' | 'B' | null }
+      const [cardStatus, setCardStatus] = useState({});
 
-    // 取得状態更新
-    setCardStatus(prev => ({ ...prev, [index]: player }));
+      // Audio
+      const [isMuted, setIsMuted] = useState(false);
+      const audioRef = useRef(null);
 
-    // 点数加算
-    const card = activeCards[index];
-    if (card) {
-      const points = POINTS[card.level];
-      if (player === 'A') setScoreA(s => s + points);
-      else setScoreB(s => s + points);
-    }
-  };
+      const timerRef = useRef(null);
 
-  // --- Components ---
+      // --- Logic ---
 
-  const WinnerOverlay = () => {
-    if (timeLeft > 0) return null;
-    
-    let resultTitle = "";
-    let resultColor = "";
-    if (scoreA > scoreB) {
-      resultTitle = "WINNER: PLAYER A";
-      resultColor = "text-blue-600";
-    } else if (scoreB > scoreA) {
-      resultTitle = "WINNER: PLAYER B";
-      resultColor = "text-pink-600";
-    } else {
-      resultTitle = "DRAW!";
-      resultColor = "text-purple-600";
-    }
+      // トピックとカードをランダムに設定（スコア・時間はオプションでリセット）
+      const setupRound = (resetStats = false) => {
+        // ランダムトピック
+        const randomTopic = TOPICS_DATA[Math.floor(Math.random() * TOPICS_DATA.length)];
+        setCurrentTopic(randomTopic);
 
-    return (
-      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center animate-in fade-in duration-500 backdrop-blur-sm">
-        <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl text-center transform animate-in zoom-in duration-300 max-w-2xl w-full mx-4 border-4 border-yellow-400">
-          <Crown size={80} className={`mx-auto mb-4 ${resultColor} animate-bounce`} />
-          <h2 className={`text-4xl md:text-5xl font-black ${resultColor} mb-6`}>{resultTitle}</h2>
+        // カード選出ロジック: 各レベルからバランスよく選出
+        const l1 = (randomTopic.words || []).filter(w => w.level === 1).sort(() => 0.5 - Math.random()).slice(0, 2);
+        const l2 = (randomTopic.words || []).filter(w => w.level === 2).sort(() => 0.5 - Math.random()).slice(0, 2);
+        const l3 = (randomTopic.words || []).filter(w => w.level === 3).sort(() => 0.5 - Math.random()).slice(0, 2);
+        
+        // 混ぜる
+        const mixed = [...l1, ...l2, ...l3].sort(() => 0.5 - Math.random());
+        setActiveCards(mixed);
+
+        // カード状態リセット（新しいカードになるため）
+        setCardStatus({});
+
+        if (resetStats) {
+          setScoreA(0);
+          setScoreB(0);
+          setTimeLeft(gameTime);
+          setIsActive(false);
+          // 音楽停止
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
+        }
+      };
+
+      // 完全に新しいゲームを開始（リセットあり）
+      const initNewGame = () => {
+        setupRound(true);
+        setMode('game');
+      };
+
+      // 次のトピックへ進む（スコア・時間維持）
+      const nextTopic = () => {
+        setupRound(false);
+      };
+
+      const startGame = () => {
+        setIsActive(true);
+        
+        // BGM再生
+        if (!isMuted && audioRef.current) {
+          const randomSrc = BGM_SOURCES[Math.floor(Math.random() * BGM_SOURCES.length)];
+          audioRef.current.src = randomSrc;
+          audioRef.current.volume = 0.3; 
           
-          <div className="flex justify-center gap-8 md:gap-16 mb-8">
-            <div className="bg-blue-50 p-4 rounded-xl w-32">
-              <div className="text-sm font-bold text-blue-400">Player A</div>
-              <div className="text-4xl font-black text-blue-600">{scoreA}</div>
-            </div>
-            <div className="bg-pink-50 p-4 rounded-xl w-32">
-              <div className="text-sm font-bold text-pink-400">Player B</div>
-              <div className="text-4xl font-black text-pink-600">{scoreB}</div>
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log("Audio playback was prevented or interrupted:", error);
+            });
+          }
+        }
+      };
+
+      // タイマー
+      useEffect(() => {
+        if (isActive && timeLeft > 0) {
+          timerRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+        } else if (timeLeft === 0) {
+          setIsActive(false);
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
+        }
+        return () => {
+          if (timerRef.current) clearTimeout(timerRef.current);
+        };
+      }, [isActive, timeLeft]);
+
+      // 全てのカードが取られたか監視する
+      useEffect(() => {
+        if (isActive && activeCards.length > 0) {
+          const takenCount = Object.keys(cardStatus).length;
+          if (takenCount === activeCards.length) {
+            // 全て取られたら少し待って次のトピックへ
+            const timeout = setTimeout(() => {
+              nextTopic();
+            }, 800);
+            return () => clearTimeout(timeout);
+          }
+        }
+      }, [cardStatus, isActive, activeCards]);
+
+      // カードクリック処理
+      const handleCardClick = (index, player) => {
+        if (!isActive && timeLeft > 0) return; // ゲーム中のみ
+        if (cardStatus[index]) return; // 取得済みなら何もしない
+
+        // 取得状態更新
+        setCardStatus(prev => ({ ...prev, [index]: player }));
+
+        // 点数加算
+        const card = activeCards[index];
+        if (card) {
+          const points = POINTS[card.level];
+          if (player === 'A') setScoreA(s => s + points);
+          else setScoreB(s => s + points);
+        }
+      };
+
+      // --- Components ---
+
+      const WinnerOverlay = () => {
+        if (timeLeft > 0) return null;
+        
+        let resultTitle = "";
+        let resultColor = "";
+        if (scoreA > scoreB) {
+          resultTitle = "WINNER: PLAYER A";
+          resultColor = "text-blue-600";
+        } else if (scoreB > scoreA) {
+          resultTitle = "WINNER: PLAYER B";
+          resultColor = "text-pink-600";
+        } else {
+          resultTitle = "DRAW!";
+          resultColor = "text-purple-600";
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center animate-in fade-in duration-500 backdrop-blur-sm">
+            <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl text-center transform animate-in zoom-in duration-300 max-w-2xl w-full mx-4 border-4 border-yellow-400">
+              <Crown size={80} className={`mx-auto mb-4 ${resultColor} animate-bounce`} />
+              <h2 className={`text-4xl md:text-5xl font-black ${resultColor} mb-6`}>{resultTitle}</h2>
+              
+              <div className="flex justify-center gap-8 md:gap-16 mb-8">
+                <div className="bg-blue-50 p-4 rounded-xl w-32">
+                  <div className="text-sm font-bold text-blue-400">Player A</div>
+                  <div className="text-4xl font-black text-blue-600">{scoreA}</div>
+                </div>
+                <div className="bg-pink-50 p-4 rounded-xl w-32">
+                  <div className="text-sm font-bold text-pink-400">Player B</div>
+                  <div className="text-4xl font-black text-pink-600">{scoreB}</div>
+                </div>
+              </div>
+
+              <button 
+                onClick={initNewGame} 
+                className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold text-xl hover:bg-slate-700 hover:scale-[1.02] transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <RefreshCw /> Play Again
+              </button>
             </div>
           </div>
+        );
+      };
 
-          <button 
-            onClick={initRound} 
-            className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold text-xl hover:bg-slate-700 hover:scale-[1.02] transition-all shadow-lg flex items-center justify-center gap-2"
-          >
-            <RefreshCw /> Play Again
-          </button>
-        </div>
-      </div>
-    );
-  };
+      const GameScreen = () => {
+        const progress = (timeLeft / gameTime) * 100;
 
-  const GameScreen = () => {
-    const progress = (timeLeft / gameTime) * 100;
+        return (
+          <div className="flex flex-col h-screen bg-slate-100 text-slate-800 overflow-hidden font-sans">
+            
+            {/* Top Bar */}
+            <div className="bg-white shadow-sm border-b px-4 py-2 flex justify-between items-center shrink-0 h-16">
+              <button onClick={() => setMode('menu')} className="text-slate-400 font-bold text-xs hover:text-slate-600 px-2 py-1 rounded border border-transparent hover:border-slate-200">
+                EXIT
+              </button>
+              
+              {/* Score Display */}
+              <div className="flex items-center gap-4 md:gap-12 flex-1 justify-center">
+                {/* Player A */}
+                <div className={`flex flex-col items-center transition-transform ${scoreA > scoreB ? 'scale-110' : 'scale-100'}`}>
+                  <span className="text-[10px] font-black text-blue-500 tracking-widest">PLAYER A</span>
+                  <span className="text-3xl font-black text-blue-600 leading-none">{scoreA}</span>
+                </div>
+                
+                {/* Timer */}
+                <div className={`flex flex-col items-center w-20 ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-slate-700'}`}>
+                  <Clock size={18} className="mb-0.5 opacity-50" />
+                  <span className="text-2xl font-mono font-bold leading-none">{timeLeft}</span>
+                </div>
 
-    return (
-      <div className="flex flex-col h-screen bg-slate-100 text-slate-800 overflow-hidden font-sans">
-        
-        {/* Top Bar */}
-        <div className="bg-white shadow-sm border-b px-4 py-2 flex justify-between items-center shrink-0 h-16">
-          <button onClick={() => setMode('menu')} className="text-slate-400 font-bold text-xs hover:text-slate-600 px-2 py-1 rounded border border-transparent hover:border-slate-200">
-            EXIT
-          </button>
-          
-          {/* Score Display */}
-          <div className="flex items-center gap-4 md:gap-12 flex-1 justify-center">
-            {/* Player A */}
-            <div className={`flex flex-col items-center transition-transform ${scoreA > scoreB ? 'scale-110' : 'scale-100'}`}>
-              <span className="text-[10px] font-black text-blue-500 tracking-widest">PLAYER A</span>
-              <span className="text-3xl font-black text-blue-600 leading-none">{scoreA}</span>
+                {/* Player B */}
+                <div className={`flex flex-col items-center transition-transform ${scoreB > scoreA ? 'scale-110' : 'scale-100'}`}>
+                  <span className="text-[10px] font-black text-pink-500 tracking-widest">PLAYER B</span>
+                  <span className="text-3xl font-black text-pink-600 leading-none">{scoreB}</span>
+                </div>
+              </div>
+
+              <button onClick={() => setIsMuted(!isMuted)} className="text-slate-400 hover:text-slate-600 p-2">
+                {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              </button>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-200 h-2 shrink-0">
+              <div 
+                className={`h-full transition-all duration-1000 linear ${timeLeft < 10 ? 'bg-red-500' : 'bg-gradient-to-r from-blue-400 to-pink-400'}`} 
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+
+            {/* Main Game Area */}
+            <div className="flex-1 flex flex-col p-2 md:p-4 gap-4 overflow-hidden max-w-6xl mx-auto w-full">
+              
+              {/* Topic Header (Click to Skip Topic without Reset) */}
+              <div 
+                onClick={nextTopic}
+                className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col items-center justify-center text-center shrink-0 relative cursor-pointer hover:shadow-md transition-all group"
+              >
+                <div className="absolute top-3 right-3 text-slate-300 group-hover:text-indigo-500 transition-colors">
+                  <RefreshCw size={18}/>
+                </div>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-4xl">{currentTopic.emoji}</span>
+                  <h2 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight">{currentTopic.title}</h2>
+                </div>
+                <p className="text-slate-500 font-medium text-sm md:text-lg">"{currentTopic.hint}"</p>
+              </div>
+
+              {/* Cards Grid */}
+              <div className="flex-1 relative">
+                {/* Start Button Overlay */}
+                {!isActive && timeLeft === gameTime && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[2px] rounded-xl">
+                     <button 
+                       onClick={startGame} 
+                       className="group relative bg-slate-900 text-white px-10 py-6 rounded-full font-black text-3xl shadow-2xl hover:scale-105 transition-transform flex items-center gap-4 overflow-hidden"
+                     >
+                       <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                       <span className="relative flex items-center gap-3 z-10"><Play fill="currentColor" /> START</span>
+                     </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 h-full content-start">
+                  {activeCards.map((card, idx) => {
+                    const status = cardStatus[idx]; // 'A' or 'B' or null
+                    const isUsed = !!status;
+                    const points = POINTS[card.level];
+                    
+                    // 色分け
+                    let borderClass = "";
+                    let bgClass = "";
+                    let badgeColor = "";
+                    let levelLabel = "";
+
+                    if (card.level === 1) {
+                      borderClass = "border-blue-200";
+                      bgClass = "bg-blue-50/30";
+                      badgeColor = "bg-blue-500";
+                      levelLabel = "L1 (+10)";
+                    } else if (card.level === 2) {
+                      borderClass = "border-emerald-200";
+                      bgClass = "bg-emerald-50/30";
+                      badgeColor = "bg-emerald-500";
+                      levelLabel = "L2 (+20)";
+                    } else {
+                      borderClass = "border-yellow-200";
+                      bgClass = "bg-yellow-50/30";
+                      badgeColor = "bg-yellow-500";
+                      levelLabel = "L3 (+30)";
+                    }
+
+                    return (
+                      <div 
+                        key={idx}
+                        className={`
+                          relative rounded-xl border-2 shadow-sm overflow-hidden flex flex-col justify-between transition-all select-none
+                          aspect-[3/4] md:aspect-auto md:h-full
+                          ${borderClass} ${bgClass}
+                          ${isUsed ? 'opacity-50 grayscale scale-95' : 'hover:-translate-y-1 hover:shadow-md'}
+                        `}
+                      >
+                        {/* Level Badge */}
+                        <div className="flex justify-between items-center px-2 py-1.5 border-b border-black/5 bg-white/50">
+                          <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${badgeColor}`}>
+                            {levelLabel}
+                          </span>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col items-center justify-center p-2 text-center">
+                          <div className="font-bold text-lg leading-tight mb-1 text-slate-800">{card.en}</div>
+                          <div className="text-xs text-slate-500">{card.ja}</div>
+                        </div>
+
+                        {/* Click Areas (Invisible until hover/touch) */}
+                        {!isUsed ? (
+                          <div className="absolute inset-0 z-10 flex opacity-0 hover:opacity-100 active:opacity-100 transition-opacity cursor-pointer">
+                            {/* Player A Area */}
+                            <div 
+                              className="w-1/2 h-full bg-blue-500/10 flex items-center justify-center border-r border-slate-300/30 active:bg-blue-500/30 transition-colors"
+                              onClick={() => handleCardClick(idx, 'A')}
+                            >
+                              <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform -translate-x-2">A</span>
+                            </div>
+                            {/* Player B Area */}
+                            <div 
+                              className="w-1/2 h-full bg-pink-500/10 flex items-center justify-center active:bg-pink-500/30 transition-colors"
+                              onClick={() => handleCardClick(idx, 'B')}
+                            >
+                               <span className="bg-pink-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform translate-x-2">B</span>
+                            </div>
+                          </div>
+                        ) : (
+                          // Taken Overlay
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 z-20 backdrop-blur-[1px]">
+                             <div className={`text-4xl font-black ${status === 'A' ? 'text-blue-500' : 'text-pink-500'}`}>
+                               {status}
+                             </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             
-            {/* Timer */}
-            <div className={`flex flex-col items-center w-20 ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-slate-700'}`}>
-              <Clock size={18} className="mb-0.5 opacity-50" />
-              <span className="text-2xl font-mono font-bold leading-none">{timeLeft}</span>
-            </div>
-
-            {/* Player B */}
-            <div className={`flex flex-col items-center transition-transform ${scoreB > scoreA ? 'scale-110' : 'scale-100'}`}>
-              <span className="text-[10px] font-black text-pink-500 tracking-widest">PLAYER B</span>
-              <span className="text-3xl font-black text-pink-600 leading-none">{scoreB}</span>
-            </div>
+            <WinnerOverlay />
           </div>
+        );
+      };
 
-          <button onClick={() => setIsMuted(!isMuted)} className="text-slate-400 hover:text-slate-600 p-2">
-            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-slate-200 h-2 shrink-0">
-          <div 
-            className={`h-full transition-all duration-1000 linear ${timeLeft < 10 ? 'bg-red-500' : 'bg-gradient-to-r from-blue-400 to-pink-400'}`} 
-            style={{ width: `${progress}%` }}
-          ></div>
-        </div>
-
-        {/* Main Game Area */}
-        <div className="flex-1 flex flex-col p-2 md:p-4 gap-4 overflow-hidden max-w-6xl mx-auto w-full">
-          
-          {/* Topic Header */}
-          <div 
-            onClick={initRound}
-            className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col items-center justify-center text-center shrink-0 relative cursor-pointer hover:shadow-md transition-all group"
-          >
-            <div className="absolute top-3 right-3 text-slate-300 group-hover:text-indigo-500 transition-colors">
-              <RefreshCw size={18}/>
-            </div>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-4xl">{currentTopic.emoji}</span>
-              <h2 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight">{currentTopic.title}</h2>
-            </div>
-            <p className="text-slate-500 font-medium text-sm md:text-lg">"{currentTopic.hint}"</p>
-          </div>
-
-          {/* Cards Grid */}
-          <div className="flex-1 relative">
-            {/* Start Button Overlay */}
-            {!isActive && timeLeft === gameTime && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[2px] rounded-xl">
-                 <button 
-                   onClick={startGame} 
-                   className="group relative bg-slate-900 text-white px-10 py-6 rounded-full font-black text-3xl shadow-2xl hover:scale-105 transition-transform flex items-center gap-4 overflow-hidden"
-                 >
-                   <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                   <span className="relative flex items-center gap-3 z-10"><Play fill="currentColor" /> START</span>
-                 </button>
+      const MenuScreen = () => (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 font-sans text-slate-800">
+          <div className="bg-white p-10 rounded-3xl shadow-xl w-full max-w-md text-center border border-slate-200">
+            <div className="mb-6 flex justify-center">
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-2xl shadow-lg">
+                <Trophy size={48} />
               </div>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 h-full content-start">
-              {activeCards.map((card, idx) => {
-                const status = cardStatus[idx]; // 'A' or 'B' or null
-                const isUsed = !!status;
-                const points = POINTS[card.level];
-                
-                // 色分け: Bronze(Level1), Silver(Level2), Gold(Level3)
-                let borderClass = "";
-                let bgClass = "";
-                let badgeColor = "";
-                let levelLabel = "";
-
-                if (card.level === 1) {
-                  borderClass = "border-blue-200";
-                  bgClass = "bg-blue-50/30";
-                  badgeColor = "bg-blue-500";
-                  levelLabel = "L1 (+10)";
-                } else if (card.level === 2) {
-                  borderClass = "border-emerald-200";
-                  bgClass = "bg-emerald-50/30";
-                  badgeColor = "bg-emerald-500";
-                  levelLabel = "L2 (+20)";
-                } else {
-                  borderClass = "border-yellow-200";
-                  bgClass = "bg-yellow-50/30";
-                  badgeColor = "bg-yellow-500";
-                  levelLabel = "L3 (+30)";
-                }
-
-                return (
-                  <div 
-                    key={idx}
-                    className={`
-                      relative rounded-xl border-2 shadow-sm overflow-hidden flex flex-col justify-between transition-all select-none
-                      aspect-[3/4] md:aspect-auto md:h-full
-                      ${borderClass} ${bgClass}
-                      ${isUsed ? 'opacity-50 grayscale scale-95' : 'hover:-translate-y-1 hover:shadow-md'}
-                    `}
-                  >
-                    {/* Level Badge */}
-                    <div className="flex justify-between items-center px-2 py-1.5 border-b border-black/5 bg-white/50">
-                      <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${badgeColor}`}>
-                        {levelLabel}
-                      </span>
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 flex flex-col items-center justify-center p-2 text-center">
-                      <div className="font-bold text-lg leading-tight mb-1 text-slate-800">{card.en}</div>
-                      <div className="text-xs text-slate-500">{card.ja}</div>
-                    </div>
-
-                    {/* Click Areas (Invisible until hover/touch) */}
-                    {!isUsed ? (
-                      <div className="absolute inset-0 z-10 flex opacity-0 hover:opacity-100 active:opacity-100 transition-opacity cursor-pointer">
-                        {/* Player A Area */}
-                        <div 
-                          className="w-1/2 h-full bg-blue-500/10 flex items-center justify-center border-r border-slate-300/30 active:bg-blue-500/30 transition-colors"
-                          onClick={() => handleCardClick(idx, 'A')}
-                        >
-                          <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform -translate-x-2">A</span>
-                        </div>
-                        {/* Player B Area */}
-                        <div 
-                          className="w-1/2 h-full bg-pink-500/10 flex items-center justify-center active:bg-pink-500/30 transition-colors"
-                          onClick={() => handleCardClick(idx, 'B')}
-                        >
-                           <span className="bg-pink-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform translate-x-2">B</span>
-                        </div>
-                      </div>
-                    ) : (
-                      // Taken Overlay
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 z-20 backdrop-blur-[1px]">
-                         <div className={`text-4xl font-black ${status === 'A' ? 'text-blue-500' : 'text-pink-500'}`}>
-                           {status}
-                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
             </div>
+            <h1 className="text-4xl font-black mb-2 text-slate-900 tracking-tight">
+              PAIR SPEAKING<br/>CHALLENGE
+            </h1>
+            <p className="text-slate-500 mb-8 font-medium">Earn points by using English!</p>
+
+            <div className="space-y-4 mb-8 text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                <Star size={16} className="text-yellow-500" fill="currentColor"/> Points System
+              </h3>
+              <ul className="text-sm space-y-2 text-slate-600">
+                <li className="flex justify-between items-center">
+                  <span><span className="bg-blue-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L1</span>Basic Words</span>
+                  <span className="font-bold text-blue-600">+10 pt</span>
+                </li>
+                <li className="flex justify-between items-center">
+                  <span><span className="bg-emerald-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L2</span>Grade 3</span>
+                  <span className="font-bold text-emerald-600">+20 pt</span>
+                </li>
+                <li className="flex justify-between items-center">
+                  <span><span className="bg-yellow-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L3</span>Grade Pre-2</span>
+                  <span className="font-bold text-yellow-600">+30 pt</span>
+                </li>
+              </ul>
+            </div>
+
+            <button
+              onClick={initNewGame}
+              className="w-full bg-slate-900 text-white py-5 rounded-2xl text-xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            >
+              <Play fill="currentColor" /> START GAME
+            </button>
           </div>
         </div>
-        
-        <WinnerOverlay />
-      </div>
-    );
-  };
+      );
 
-  const MenuScreen = () => (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 font-sans text-slate-800">
-      <div className="bg-white p-10 rounded-3xl shadow-xl w-full max-w-md text-center border border-slate-200">
-        <div className="mb-6 flex justify-center">
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-2xl shadow-lg">
-            <Trophy size={48} />
-          </div>
-        </div>
-        <h1 className="text-4xl font-black mb-2 text-slate-900 tracking-tight">
-          PAIR SPEAKING<br/>CHALLENGE
-        </h1>
-        <p className="text-slate-500 mb-8 font-medium">Earn points by using English!</p>
+      return (
+        <React.Fragment>
+          <audio ref={audioRef} loop />
+          {mode === 'menu' && <MenuScreen />}
+          {mode === 'game' && <GameScreen />}
+        </React.Fragment>
+      );
+    }
 
-        <div className="space-y-4 mb-8 text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <h3 className="font-bold text-slate-700 flex items-center gap-2">
-            <Star size={16} className="text-yellow-500" fill="currentColor"/> Points System
-          </h3>
-          <ul className="text-sm space-y-2 text-slate-600">
-            <li className="flex justify-between items-center">
-              <span><span className="bg-blue-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L1</span>Basic Words</span>
-              <span className="font-bold text-blue-600">+10 pt</span>
-            </li>
-            <li className="flex justify-between items-center">
-              <span><span className="bg-emerald-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L2</span>Grade 3</span>
-              <span className="font-bold text-emerald-600">+20 pt</span>
-            </li>
-            <li className="flex justify-between items-center">
-              <span><span className="bg-yellow-500 text-white px-1.5 rounded-full text-[10px] mr-2 font-bold">L3</span>Grade Pre-2</span>
-              <span className="font-bold text-yellow-600">+30 pt</span>
-            </li>
-          </ul>
-        </div>
-
-        <button
-          onClick={initRound}
-          onClickCapture={() => setMode('game')}
-          className="w-full bg-slate-900 text-white py-5 rounded-2xl text-xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-        >
-          <Play fill="currentColor" /> START GAME
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <>
-      <audio ref={audioRef} loop />
-      {mode === 'menu' && <MenuScreen />}
-      {mode === 'game' && <GameScreen />}
-    </>
-  );
-}
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
