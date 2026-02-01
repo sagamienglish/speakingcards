@@ -16,6 +16,15 @@
     body {
       font-family: 'Helvetica Neue', Arial, sans-serif;
       touch-action: manipulation; /* ダブルタップズーム防止 */
+      user-select: none; /* テキスト選択防止 */
+    }
+    @keyframes pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.5); color: #fbbf24; }
+      100% { transform: scale(1); }
+    }
+    .score-pop {
+      animation: pop 0.3s ease-out;
     }
   </style>
 </head>
@@ -101,6 +110,13 @@
     const Star = (props) => (
       <IconWrapper {...props}>
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+      </IconWrapper>
+    );
+
+    const Settings = (props) => (
+      <IconWrapper {...props}>
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
       </IconWrapper>
     );
 
@@ -285,6 +301,9 @@
       "https://cdn.pixabay.com/download/audio/2022/11/22/audio_febc508520.mp3", // Happy Upbeat
       "https://cdn.pixabay.com/download/audio/2022/10/25/audio_5103407886.mp3", // Fun Comedy
     ];
+    
+    // 効果音 (SE) URL - 短い音を採用
+    const SE_POINT = "https://cdn.pixabay.com/download/audio/2021/08/04/audio_12b0c7443c.mp3"; // Ding Sound
 
     // ポイント定義
     const POINTS = {
@@ -302,13 +321,17 @@
       const [activeCards, setActiveCards] = useState([]);
       
       // Game Status
+      const [gameTimeSetting, setGameTimeSetting] = useState(60); // デフォルト60秒
       const [timeLeft, setTimeLeft] = useState(60);
-      const [gameTime, setGameTime] = useState(60);
       const [isActive, setIsActive] = useState(false);
       
       // Scoring: Player A vs Player B
       const [scoreA, setScoreA] = useState(0);
       const [scoreB, setScoreB] = useState(0);
+      
+      // Score Animation State (trigger animation when score changes)
+      const [animateScoreA, setAnimateScoreA] = useState(false);
+      const [animateScoreB, setAnimateScoreB] = useState(false);
       
       // Card Ownership: { index: 'A' | 'B' | null }
       const [cardStatus, setCardStatus] = useState({});
@@ -316,10 +339,37 @@
       // Audio
       const [isMuted, setIsMuted] = useState(false);
       const audioRef = useRef(null);
+      const seRef = useRef(null); // SE用Ref
 
       const timerRef = useRef(null);
 
       // --- Logic ---
+      
+      // SE再生
+      const playSe = () => {
+        if (!isMuted && seRef.current) {
+          seRef.current.currentTime = 0;
+          seRef.current.volume = 0.5;
+          seRef.current.play().catch(e => console.log("SE Playback failed", e));
+        }
+      };
+
+      // スコアアニメーション発火
+      useEffect(() => {
+        if (scoreA > 0) {
+          setAnimateScoreA(true);
+          const t = setTimeout(() => setAnimateScoreA(false), 300);
+          return () => clearTimeout(t);
+        }
+      }, [scoreA]);
+
+      useEffect(() => {
+        if (scoreB > 0) {
+          setAnimateScoreB(true);
+          const t = setTimeout(() => setAnimateScoreB(false), 300);
+          return () => clearTimeout(t);
+        }
+      }, [scoreB]);
 
       // トピックとカードをランダムに設定（スコア・時間はオプションでリセット）
       const setupRound = (resetStats = false) => {
@@ -342,7 +392,7 @@
         if (resetStats) {
           setScoreA(0);
           setScoreB(0);
-          setTimeLeft(gameTime);
+          setTimeLeft(gameTimeSetting); // 設定時間を使用
           setIsActive(false);
           // 音楽停止
           if (audioRef.current) {
@@ -416,6 +466,9 @@
         if (!isActive && timeLeft > 0) return; // ゲーム中のみ
         if (cardStatus[index]) return; // 取得済みなら何もしない
 
+        // SE再生
+        playSe();
+
         // 取得状態更新
         setCardStatus(prev => ({ ...prev, [index]: player }));
 
@@ -475,7 +528,7 @@
       };
 
       const GameScreen = () => {
-        const progress = (timeLeft / gameTime) * 100;
+        const progress = (timeLeft / gameTimeSetting) * 100;
 
         return (
           <div className="flex flex-col h-screen bg-slate-100 text-slate-800 overflow-hidden font-sans">
@@ -489,9 +542,9 @@
               {/* Score Display */}
               <div className="flex items-center gap-4 md:gap-12 flex-1 justify-center">
                 {/* Player A */}
-                <div className={`flex flex-col items-center transition-transform ${scoreA > scoreB ? 'scale-110' : 'scale-100'}`}>
+                <div className={`flex flex-col items-center transition-transform ${animateScoreA ? 'scale-125' : 'scale-100'}`}>
                   <span className="text-[10px] font-black text-blue-500 tracking-widest">PLAYER A</span>
-                  <span className="text-3xl font-black text-blue-600 leading-none">{scoreA}</span>
+                  <span className={`text-3xl font-black text-blue-600 leading-none ${animateScoreA ? 'score-pop' : ''}`}>{scoreA}</span>
                 </div>
                 
                 {/* Timer */}
@@ -501,9 +554,9 @@
                 </div>
 
                 {/* Player B */}
-                <div className={`flex flex-col items-center transition-transform ${scoreB > scoreA ? 'scale-110' : 'scale-100'}`}>
+                <div className={`flex flex-col items-center transition-transform ${animateScoreB ? 'scale-125' : 'scale-100'}`}>
                   <span className="text-[10px] font-black text-pink-500 tracking-widest">PLAYER B</span>
-                  <span className="text-3xl font-black text-pink-600 leading-none">{scoreB}</span>
+                  <span className={`text-3xl font-black text-pink-600 leading-none ${animateScoreB ? 'score-pop' : ''}`}>{scoreB}</span>
                 </div>
               </div>
 
@@ -523,25 +576,25 @@
             {/* Main Game Area */}
             <div className="flex-1 flex flex-col p-2 md:p-4 gap-4 overflow-hidden max-w-6xl mx-auto w-full">
               
-              {/* Topic Header (Click to Skip Topic without Reset) */}
+              {/* Topic Header */}
               <div 
                 onClick={nextTopic}
-                className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col items-center justify-center text-center shrink-0 relative cursor-pointer hover:shadow-md transition-all group"
+                className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2 md:p-4 flex flex-col items-center justify-center text-center shrink-0 relative cursor-pointer hover:shadow-md transition-all group"
               >
-                <div className="absolute top-3 right-3 text-slate-300 group-hover:text-indigo-500 transition-colors">
-                  <RefreshCw size={18}/>
+                <div className="absolute top-2 right-2 text-slate-300 group-hover:text-indigo-500 transition-colors">
+                  <RefreshCw size={16}/>
                 </div>
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="text-4xl">{currentTopic.emoji}</span>
-                  <h2 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight">{currentTopic.title}</h2>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-3xl md:text-4xl">{currentTopic.emoji}</span>
+                  <h2 className="text-lg md:text-2xl font-black text-slate-800 uppercase tracking-tight">{currentTopic.title}</h2>
                 </div>
-                <p className="text-slate-500 font-medium text-sm md:text-lg">"{currentTopic.hint}"</p>
+                <p className="text-slate-500 font-medium text-xs md:text-lg line-clamp-2">"{currentTopic.hint}"</p>
               </div>
 
-              {/* Cards Grid */}
+              {/* Cards Grid - 3x2 Layout (Responsive) */}
               <div className="flex-1 relative">
                 {/* Start Button Overlay */}
-                {!isActive && timeLeft === gameTime && (
+                {!isActive && timeLeft === gameTimeSetting && (
                   <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[2px] rounded-xl">
                      <button 
                        onClick={startGame} 
@@ -553,7 +606,7 @@
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 h-full content-start">
+                <div className="grid grid-cols-3 gap-2 md:gap-4 h-full content-stretch">
                   {activeCards.map((card, idx) => {
                     const status = cardStatus[idx]; // 'A' or 'B' or null
                     const isUsed = !!status;
@@ -587,46 +640,45 @@
                         key={idx}
                         className={`
                           relative rounded-xl border-2 shadow-sm overflow-hidden flex flex-col justify-between transition-all select-none
-                          aspect-[3/4] md:aspect-auto md:h-full
                           ${borderClass} ${bgClass}
-                          ${isUsed ? 'opacity-50 grayscale scale-95' : 'hover:-translate-y-1 hover:shadow-md'}
+                          ${isUsed ? 'opacity-50 grayscale scale-95' : 'hover:shadow-md'}
                         `}
                       >
-                        {/* Level Badge */}
-                        <div className="flex justify-between items-center px-2 py-1.5 border-b border-black/5 bg-white/50">
-                          <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${badgeColor}`}>
+                        {/* Header Badge */}
+                        <div className="flex justify-between items-center px-2 py-1 bg-white/50 border-b border-black/5">
+                          <span className={`text-[10px] font-bold text-white px-1.5 rounded-full ${badgeColor}`}>
                             {levelLabel}
                           </span>
                         </div>
 
-                        {/* Content */}
-                        <div className="flex-1 flex flex-col items-center justify-center p-2 text-center">
-                          <div className="font-bold text-lg leading-tight mb-1 text-slate-800">{card.en}</div>
-                          <div className="text-xs text-slate-500">{card.ja}</div>
+                        {/* Card Content */}
+                        <div className="flex-1 flex flex-col items-center justify-center p-1 text-center">
+                          <div className="font-bold text-base md:text-xl leading-tight mb-1 text-slate-800 break-words w-full">{card.en}</div>
+                          <div className="text-[10px] md:text-xs text-slate-500">{card.ja}</div>
                         </div>
 
-                        {/* Click Areas (Invisible until hover/touch) */}
-                        {!isUsed ? (
-                          <div className="absolute inset-0 z-10 flex opacity-0 hover:opacity-100 active:opacity-100 transition-opacity cursor-pointer">
-                            {/* Player A Area */}
-                            <div 
-                              className="w-1/2 h-full bg-blue-500/10 flex items-center justify-center border-r border-slate-300/30 active:bg-blue-500/30 transition-colors"
-                              onClick={() => handleCardClick(idx, 'A')}
+                        {/* Action Buttons (1-Tap Areas) - Always Visible but styled */}
+                        {!isUsed && (
+                          <div className="flex h-12 md:h-16 border-t border-slate-300/30">
+                            <button 
+                              className="flex-1 bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/40 text-blue-600 font-black text-lg flex items-center justify-center transition-colors border-r border-slate-300/30"
+                              onClick={(e) => { e.stopPropagation(); handleCardClick(idx, 'A'); }}
                             >
-                              <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform -translate-x-2">A</span>
-                            </div>
-                            {/* Player B Area */}
-                            <div 
-                              className="w-1/2 h-full bg-pink-500/10 flex items-center justify-center active:bg-pink-500/30 transition-colors"
-                              onClick={() => handleCardClick(idx, 'B')}
+                              A
+                            </button>
+                            <button 
+                              className="flex-1 bg-pink-500/10 hover:bg-pink-500/20 active:bg-pink-500/40 text-pink-600 font-black text-lg flex items-center justify-center transition-colors"
+                              onClick={(e) => { e.stopPropagation(); handleCardClick(idx, 'B'); }}
                             >
-                               <span className="bg-pink-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm transform translate-x-2">B</span>
-                            </div>
+                              B
+                            </button>
                           </div>
-                        ) : (
-                          // Taken Overlay
+                        )}
+
+                        {/* Taken Overlay */}
+                        {isUsed && (
                           <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 z-20 backdrop-blur-[1px]">
-                             <div className={`text-4xl font-black ${status === 'A' ? 'text-blue-500' : 'text-pink-500'}`}>
+                             <div className={`text-4xl md:text-5xl font-black ${status === 'A' ? 'text-blue-500' : 'text-pink-500'}`}>
                                {status}
                              </div>
                           </div>
@@ -655,6 +707,27 @@
               PAIR SPEAKING<br/>CHALLENGE
             </h1>
             <p className="text-slate-500 mb-8 font-medium">Earn points by using English!</p>
+
+            {/* Time Settings */}
+            <div className="mb-6 bg-slate-100 p-4 rounded-xl">
+              <label className="block text-sm font-bold text-slate-600 mb-2 flex justify-between">
+                <span>Time Limit:</span>
+                <span className="text-indigo-600 text-lg">{gameTimeSetting} sec</span>
+              </label>
+              <input 
+                type="range" 
+                min="30" 
+                max="180" 
+                step="10" 
+                value={gameTimeSetting} 
+                onChange={(e) => setGameTimeSetting(Number(e.target.value))}
+                className="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+              <div className="flex justify-between text-xs text-slate-400 mt-1">
+                <span>30s</span>
+                <span>180s</span>
+              </div>
+            </div>
 
             <div className="space-y-4 mb-8 text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
               <h3 className="font-bold text-slate-700 flex items-center gap-2">
@@ -688,7 +761,8 @@
 
       return (
         <React.Fragment>
-          <audio ref={audioRef} loop />
+          <audio ref={audioRef} loop preload="auto" />
+          <audio ref={seRef} src={SE_POINT} preload="auto" />
           {mode === 'menu' && <MenuScreen />}
           {mode === 'game' && <GameScreen />}
         </React.Fragment>
